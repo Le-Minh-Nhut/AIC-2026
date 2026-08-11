@@ -32,7 +32,7 @@ def write_submission(path: Path, queries: Sequence[SubmissionQuery]) -> Path:
         raise SubmissionFormatError("Submission has more than 100 results for a query")
     payload = {
         "schema_version": SUBMISSION_SCHEMA_VERSION,
-        "queries": [_query_to_dict(query) for query in queries],
+        "queries": [submission_query_to_dict(query) for query in queries],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -93,7 +93,9 @@ def submission_from_debug(
     )
 
 
-def _query_to_dict(query: SubmissionQuery) -> dict[str, object]:
+def submission_query_to_dict(query: SubmissionQuery) -> dict[str, object]:
+    """Serialize one already-validated query for UI preview or JSON submission output."""
+
     return {
         "query_id": query.query_id,
         "task": query.task.value,

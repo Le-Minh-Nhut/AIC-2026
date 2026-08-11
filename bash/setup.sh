@@ -7,7 +7,7 @@ cd "$REPO_ROOT"
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_DIR="${VENV_DIR:-.venv}"
-INSTALL_EXTRAS="${INSTALL_EXTRAS:-dev,btc-clip,fgclip2,pecore,faiss,refinement,qwen3-vl}"
+INSTALL_EXTRAS="${INSTALL_EXTRAS:-dev,btc-clip,fgclip2,pecore,faiss,refinement,qwen3-vl,web}"
 PERCEPTION_MODELS_PATH="${PERCEPTION_MODELS_PATH:-}"
 
 "$PYTHON_BIN" -m venv "$VENV_DIR"

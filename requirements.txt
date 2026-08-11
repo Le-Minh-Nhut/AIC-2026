@@ -1,0 +1,41 @@
+# AIC-2026 — RTX 5070 Ti / Ubuntu / Python 3.12
+#
+# Hardware target:
+#   NVIDIA GeForce RTX 5070 Ti (Blackwell / sm_120, 16 GB)
+#
+# Recommended system setup:
+#   - Python 3.12
+#   - NVIDIA driver new enough for CUDA 13.0
+#
+# PyTorch 2.13 uses CUDA 13.0 as the stable/default CUDA build.
+# Keep this extra index so CUDA-specific wheels such as xformers can be resolved.
+--extra-index-url https://download.pytorch.org/whl/cu130
+
+# ---------------------------------------------------------------------------
+# GPU stack
+# ---------------------------------------------------------------------------
+torch==2.13.0
+torchvision==0.28.0
+
+# PE / optimized attention dependency.
+# xFormers 0.0.35 uses the PyTorch stable ABI for PyTorch >= 2.10.
+xformers==0.0.35
+
+# Optional but useful for running Qwen3-VL-8B in 4-bit on a 16 GB GPU.
+# CUDA 13 / sm_120 wheels are supported.
+bitsandbytes==0.49.2
+
+# ---------------------------------------------------------------------------
+# This repository
+# ---------------------------------------------------------------------------
+# Keep the actual application dependencies centralized in pyproject.toml.
+# This avoids duplicating/version-drifting the project's extras here.
+-e .[dev,btc-clip,fgclip2,pecore,faiss,refinement,qwen3-vl,web]
+
+# ---------------------------------------------------------------------------
+# Meta Perception Encoder
+# ---------------------------------------------------------------------------
+# The AIC repository's PE adapter expects Meta's perception_models package.
+# Pin to main for now; for strict reproducibility later, replace `main`
+# with a tested commit SHA from the PC benchmark environment.
+git+https://github.com/facebookresearch/perception_models.git@main

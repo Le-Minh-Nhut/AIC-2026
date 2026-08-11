@@ -92,3 +92,10 @@ Runtime modules are direct packages under `src/`: `data/`, `domain/`,
 `submission/`, `experiments/`, and `hardening/`. Scripts add
 `src/` to `sys.path`; installation also exposes these packages directly. The
 former `src/aic2026/` wrapper does not exist.
+
+## Interactive competition UI
+
+`src/api/` provides a lazy FastAPI facade over the existing KIS, Q&A, and
+TRAKE services, while `web/frontend/` provides a keyboard-first React/Vite
+competition desk. It does not add or change retrieval algorithms. See
+`docs/WEB_UI.md` for routes, local model requirements, and launch commands.

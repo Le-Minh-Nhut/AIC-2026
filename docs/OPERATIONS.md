@@ -11,7 +11,7 @@ cd AIC-2026
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev,btc-clip,fgclip2,pecore,faiss,refinement,qwen3-vl]"
+python -m pip install -e ".[dev,btc-clip,fgclip2,pecore,faiss,refinement,qwen3-vl,web]"
 git clone https://github.com/facebookresearch/perception_models.git ../perception_models
 python -m pip install -e ../perception_models
 ```
@@ -155,3 +155,23 @@ OCR/ASR artifacts are validated if enabled, each task emits valid Top-100
 submissions, held-out metrics are logged, and the selected configuration has
 been profiled. This laptop run intentionally does not claim those full-data or
 full-model checks.
+
+## Interactive Web UI
+
+The local competition desk adds no alternate retrieval path: its FastAPI
+backend lazily wraps the existing KIS, Q&A, TRAKE, RRF, refinement, VLM, and
+submission services. Install the `web` extra, then install the Vite packages
+once and run:
+
+```bash
+cd web/frontend && npm install && cd ../..
+DEVICE=cuda PE_CHECKPOINT=/models/PE-Core-G14-448.pt \
+  VLM_CHECKPOINT=/models/Qwen3-VL-8B-Instruct bash bash/run_web.sh
+cd web/frontend && npm run dev
+```
+
+For one command that starts both local processes, use
+`WEB_MODE=full bash bash/run_web.sh`. See `docs/WEB_UI.md` for routes, source
+toggle constraints, keyboard workflow, and security boundaries. The UI has a
+manual-description panel only; it intentionally does not capture, record, or
+upload competition video.
