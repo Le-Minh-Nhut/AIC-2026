@@ -1,0 +1,6 @@
+task: kis
+# One of: btc_clip, fgclip2_large, pecore_g14_448, fg_pe_fusion.
+encoder: fg_pe_fusion
+candidate_count: 100
+coarse_only: false
+frame_refinement_required: true

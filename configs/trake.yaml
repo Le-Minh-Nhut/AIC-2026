@@ -1,0 +1,12 @@
+task: trake
+encoder: fg_pe_fusion
+event_top_k: 100
+candidate_videos: 100
+k_best_sequences: 100
+sequences_to_refine: 20
+local_frame_candidates: 8
+min_temporal_gap_sec: 0.0
+max_temporal_gap_sec: null
+gap_penalty: 0.0
+sequence_dedup_window_sec: 0.5
+refinement_enabled: true

@@ -1,0 +1,45 @@
+search:
+  top_k_per_encoder: 1000
+  exact_index_first: true
+  exact_batch_size: 8192
+  candidate_pool_multiplier: 5
+fgclip2:
+  embeddings_dir: data/processed/embeddings/fgclip2_large
+  index_dir: data/processed/indexes/fgclip2_large
+  faiss_batch_size: 8192
+pecore:
+  embeddings_dir: data/processed/embeddings/pecore_g14_448
+  index_dir: data/processed/indexes/pecore_g14_448
+  faiss_batch_size: 8192
+fusion:
+  method: rrf
+  rrf_k: 60
+  weights:
+    fgclip2: 1.0
+    pecore: 1.0
+    ocr: 0.7
+    asr: 0.7
+    metadata: 0.5
+auxiliary_retrieval:
+  ocr:
+    enabled: false
+    records_path: processed/ocr/ocr_records.jsonl
+  asr:
+    enabled: false
+    records_path: processed/asr/transcript_segments.jsonl
+  metadata:
+    enabled: false
+    records_path: processed/metadata/metadata_records.jsonl
+    fields: []
+temporal_nms:
+  enabled: true
+  window_sec: 2.0
+video_aggregation:
+  method: max
+  top_m: 3
+refinement:
+  enabled: true
+  coarse_window_sec: 3.0
+  sparse_fps: 4
+  dense_window_sec: 1.0
+  candidate_count: 10

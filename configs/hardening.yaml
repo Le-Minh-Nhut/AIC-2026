@@ -1,0 +1,23 @@
+reproducibility:
+  random_seed: 2026
+submission:
+  max_results_per_query: 100
+  diversity:
+    max_per_video: 20
+    temporal_window_sec: 2.0
+    max_sequences_per_video: 20
+    trake_near_duplicate_frame_window: 15
+storage_cleanup:
+  targets:
+    fgclip2_large:
+      - processed/embeddings/fgclip2_large
+      - processed/indexes/fgclip2_large
+    pecore_g14_448:
+      - processed/embeddings/pecore_g14_448
+      - processed/indexes/pecore_g14_448
+    btc_clip:
+      - processed/indexes/btc_clip
+    dense_frame_cache:
+      - processed/dense_frame_cache
+profile:
+  output_dir: outputs/profiles

@@ -1,0 +1,36 @@
+paths:
+  data_root: data
+  manifests_dir: manifests
+  archives_dir: raw/archives
+  videos_dir: raw/videos
+  keyframes_dir: raw/keyframes
+  btc_clip_features_dir: raw/btc_clip_features
+  map_keyframes_dir: raw/map_keyframes
+  objects_dir: raw/objects
+  media_info_dir: raw/media_info
+  reports_dir: reports
+
+source_sheet:
+  csv_url: https://docs.google.com/spreadsheets/d/1rfn1fieTThS_Ki3SIoJ6uXOx2AhMq7wGCak6W4jZyZM/export?format=csv&gid=0
+  filename_column: Filenames
+  url_column: Download link
+
+download:
+  timeout_seconds: 30
+  retries: 3
+  backoff_seconds: 1.0
+  chunk_size_bytes: 1048576
+  workers: 2
+  low_space_warning_fraction: 0.15
+  reserved_free_space_bytes: 1073741824
+
+extraction:
+  reject_symlinks: true
+  overwrite_identical_files: false
+
+analysis:
+  mapping_timestamp_tolerance_seconds: 1.0
+  duration_consistency_tolerance_seconds: 1.0
+  strict_fail_severities: [BLOCKER, HIGH]
+  random_seed: 2026
+
