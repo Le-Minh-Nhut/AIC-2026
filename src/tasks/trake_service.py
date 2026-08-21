@@ -41,7 +41,8 @@ class TrakeSequence:
     video_id: str
     coarse_alignment: TemporalAlignment
     refined_alignment: TemporalAlignment | None
-    total_alignment_score: float
+    total_alignment_score: float  # Coarse global score used for final ranking/submission.
+    local_alignment_score: float | None = None
     rank: int = 0
     refinement_status: str = "not_selected"
     refinement_error: str | None = None
@@ -64,6 +65,8 @@ class TrakeSequence:
             "ordered_frame_ids": list(final.frame_ids),
             "event_scores": list(final.event_scores),
             "total_alignment_score": self.total_alignment_score,
+            "coarse_alignment_score": self.coarse_alignment.total_score,
+            "local_alignment_score": self.local_alignment_score,
             "transition_penalty": final.transition_penalty,
             "refinement_status": self.refinement_status,
             "refinement_error": self.refinement_error,
@@ -191,6 +194,7 @@ class TrakeService:
                         coarse_alignment=coarse_alignment,
                         refined_alignment=None,
                         total_alignment_score=coarse_alignment.total_score,
+                        local_alignment_score=None,
                         refinement_status="not_configured",
                     )
                 )
@@ -202,6 +206,7 @@ class TrakeService:
                         coarse_alignment=coarse_alignment,
                         refined_alignment=None,
                         total_alignment_score=coarse_alignment.total_score,
+                        local_alignment_score=None,
                         refinement_status="not_selected",
                     )
                 )
@@ -214,7 +219,8 @@ class TrakeService:
                         video_id=alignment.video_id,
                         coarse_alignment=coarse_alignment,
                         refined_alignment=alignment,
-                        total_alignment_score=alignment.total_score,
+                        total_alignment_score=coarse_alignment.total_score,
+                        local_alignment_score=alignment.total_score,
                         refinement_status="refined",
                     )
                     for alignment in run.alignments
@@ -227,6 +233,7 @@ class TrakeService:
                     coarse_alignment=coarse_alignment,
                     refined_alignment=None,
                     total_alignment_score=coarse_alignment.total_score,
+                    local_alignment_score=None,
                     refinement_status="failed",
                     refinement_error=message,
                 )
@@ -238,7 +245,10 @@ class TrakeService:
         for sequence in sorted(
             sequences,
             key=lambda item: (
-                -item.total_alignment_score,
+                # Coarse temporal alignment is the global sequence/video
+                # relevance prior.  Refined local scores are deliberately
+                # excluded here because their windows are incomparable.
+                -item.coarse_alignment.total_score,
                 item.video_id,
                 item.final_alignment.frame_ids,
             ),

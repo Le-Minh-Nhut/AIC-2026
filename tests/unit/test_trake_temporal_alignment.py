@@ -63,12 +63,73 @@ class _FakeFrameRefiner:
 
 
 class TrakeTemporalAlignmentTests(unittest.TestCase):
+    def test_rule_decomposer_parses_multiline_parenthesized_official_list(self) -> None:
+        query = (
+            "Tìm 4 khoảnh khắc:\n(1) giậm nhảy,\n(2) bay qua xà,\n"
+            "(3) tiếp đất,\n(4) đứng dậy"
+        )
+
+        events = RuleBasedEventDecomposer().decompose(query)
+
+        self.assertEqual(
+            [event.text for event in events],
+            ["giậm nhảy", "bay qua xà", "tiếp đất", "đứng dậy"],
+        )
+        self.assertEqual([event.index for event in events], [0, 1, 2, 3])
+
+    def test_rule_decomposer_parses_inline_parenthesized_official_list(self) -> None:
+        query = (
+            "Tìm các khoảnh khắc: (1) giậm nhảy, (2) bay qua xà, "
+            "(3) tiếp đất, (4) đứng dậy"
+        )
+
+        events = RuleBasedEventDecomposer().decompose(query)
+
+        self.assertEqual(len(events), 4)
+        self.assertEqual(
+            [event.text for event in events],
+            ["giậm nhảy", "bay qua xà", "tiếp đất", "đứng dậy"],
+        )
+
+    def test_rule_decomposer_keeps_existing_numbered_and_arrow_syntax(self) -> None:
+        numbered = RuleBasedEventDecomposer().decompose("1. approach\n2) takeoff\n- landing")
+        arrow = RuleBasedEventDecomposer().decompose("approach -> takeoff -> landing")
+
+        self.assertEqual(
+            [event.text for event in numbered],
+            ["approach", "takeoff", "landing"],
+        )
+        self.assertEqual(
+            [event.text for event in arrow],
+            ["approach", "takeoff", "landing"],
+        )
+
+    def test_parentheses_in_ordinary_prose_remain_one_event(self) -> None:
+        query = "A person picks up an object (possibly a bag) and walks away."
+
+        events = RuleBasedEventDecomposer().decompose(query)
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].text, query)
+
+    def test_focus_event_precedes_long_context_in_retrieval_text(self) -> None:
+        event = EventQuery(index=2, text="tiếp đất", context="chuỗi sự kiện " * 100)
+
+        retrieval_text = event.retrieval_text
+
+        self.assertTrue(retrieval_text.startswith("Focus event 3: tiếp đất"))
+        self.assertIn("Sequence context:", retrieval_text)
+        self.assertIn(event.context, retrieval_text)
+
     def test_rule_decomposer_preserves_full_context_for_short_list_events(self) -> None:
         query = "chạy đà → giậm nhảy → qua xà → tiếp đất"
 
         events = RuleBasedEventDecomposer().decompose(query)
 
-        self.assertEqual([event.text for event in events], ["chạy đà", "giậm nhảy", "qua xà", "tiếp đất"])
+        self.assertEqual(
+            [event.text for event in events],
+            ["chạy đà", "giậm nhảy", "qua xà", "tiếp đất"],
+        )
         self.assertIn(query, events[3].retrieval_text)
         self.assertIn("tiếp đất", events[3].retrieval_text)
 
@@ -127,4 +188,12 @@ class TrakeTemporalAlignmentTests(unittest.TestCase):
 
         self.assertEqual(run.failures, ())
         self.assertEqual(run.alignments[0].frame_ids, (10, 20))
-        self.assertTrue(all(left < right for left, right in zip(run.alignments[0].frame_ids, run.alignments[0].frame_ids[1:])))
+        self.assertTrue(
+            all(
+                left < right
+                for left, right in zip(
+                    run.alignments[0].frame_ids,
+                    run.alignments[0].frame_ids[1:],
+                )
+            )
+        )

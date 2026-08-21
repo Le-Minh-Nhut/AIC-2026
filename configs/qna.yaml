@@ -1,7 +1,7 @@
 task: qna
 encoder: fg_pe_fusion
 candidate_count: 20
-answer_candidate_count: 1
+answer_candidate_count: 5
 multi_frame_count: 8
 clip_window_sec: 2.0
 refinement_enabled: true

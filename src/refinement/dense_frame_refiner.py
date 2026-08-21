@@ -74,6 +74,34 @@ class RefinedFrameCandidate:
     rank: int
     source: str
     source_scores: tuple[CandidateSourceScore, ...]
+    refinement_status: str = "refined"
+
+    @classmethod
+    def from_coarse(cls, coarse: Candidate) -> "RefinedFrameCandidate":
+        """Represent a coarse candidate safely when dense refinement is unavailable.
+
+        The coarse score and frame remain the candidate's global retrieval
+        evidence.  A caller can overlay a refined frame later without losing
+        the original candidate's identity or rank coverage.
+        """
+
+        return cls(
+            source_keyframe_uid=coarse.keyframe_uid,
+            video_id=coarse.video_id,
+            coarse_original_frame_id=coarse.original_frame_id,
+            coarse_timestamp_sec=coarse.timestamp_sec,
+            coarse_score=coarse.score,
+            sparse_original_frame_id=coarse.original_frame_id,
+            sparse_timestamp_sec=coarse.timestamp_sec,
+            sparse_score=coarse.score,
+            original_frame_id=coarse.original_frame_id,
+            timestamp_sec=coarse.timestamp_sec,
+            score=coarse.score,
+            rank=coarse.rank,
+            source=coarse.source,
+            source_scores=coarse.source_scores,
+            refinement_status="coarse_fallback",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,10 +266,27 @@ class DenseFrameRefiner:
         self._config = config
 
     def refine(self, query: str, coarse_candidates: Sequence[Candidate]) -> DenseRefinementRun:
-        prepared_scorer = self._scorer.prepare(query)
-        selected = tuple(sorted(coarse_candidates, key=lambda candidate: candidate.rank))[
+        selected = tuple(
+            sorted(coarse_candidates, key=lambda candidate: (candidate.rank, candidate.keyframe_uid))
+        )[
             : self._config.candidate_count
         ]
+        try:
+            prepared_scorer = self._scorer.prepare(query)
+        except (FrameScoringError, OSError, ValueError) as error:
+            return DenseRefinementRun(
+                candidates=(),
+                failures=tuple(
+                    RefinementFailure(
+                        source_keyframe_uid=coarse.keyframe_uid,
+                        video_id=coarse.video_id,
+                        coarse_original_frame_id=coarse.original_frame_id,
+                        coarse_score=coarse.score,
+                        error=str(error),
+                    )
+                    for coarse in selected
+                ),
+            )
         successes: list[RefinedFrameCandidate] = []
         failures: list[RefinementFailure] = []
         for coarse in selected:
@@ -266,7 +311,12 @@ class DenseFrameRefiner:
                 )
         ordered = sorted(
             successes,
-            key=lambda candidate: (-candidate.score, candidate.video_id, candidate.original_frame_id),
+            key=lambda candidate: (
+                -candidate.score,
+                candidate.video_id,
+                candidate.original_frame_id,
+                candidate.source_keyframe_uid,
+            ),
         )
         return DenseRefinementRun(
             candidates=tuple(replace(candidate, rank=rank) for rank, candidate in enumerate(ordered, start=1)),
@@ -344,6 +394,7 @@ class DenseFrameRefiner:
                 rank=refined.rank,
                 source=refined.source,
                 source_scores=refined.source_scores,
+                refinement_status="refined",
             )
             for refined in scorer.score(dense_frames)
         )

@@ -5,6 +5,7 @@ import json
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -40,6 +41,9 @@ qna_service = importlib.import_module("tasks.qna_service")
 QnAQuery = qna_service.QnAQuery
 QnaService = qna_service.QnaService
 QnaServiceConfig = qna_service.QnaServiceConfig
+TaskType = importlib.import_module("domain.competition").TaskType
+FrameDiversityConfig = importlib.import_module("submission.ranker").FrameDiversityConfig
+submission_from_debug = importlib.import_module("submission.writer").submission_from_debug
 
 
 def _video() -> VideoRecord:
@@ -138,6 +142,55 @@ def _coarse_result() -> KisCoarseResult:
 
 
 class QnaServiceIntegrationTests(unittest.TestCase):
+    def test_answer_budget_preserves_recovery_candidates_through_rank_five(self) -> None:
+        candidates = tuple(
+            replace(
+                _candidate(frame_id=rank * 5, score=1.0 - rank * 0.1),
+                keyframe_uid=f"L21_V001:{rank:06d}",
+                rank=rank,
+            )
+            for rank in range(1, 6)
+        )
+        retrieval = replace(
+            _coarse_result(),
+            candidates=candidates,
+            initial_candidate_count=len(candidates),
+        )
+        searcher = _FakeSearcher(retrieval)
+        answerer = _FakeAnswerer()
+        service = QnaService(
+            searcher=searcher,
+            clip_selector=_clip_selector(),
+            answerer=answerer,
+            answer_normalizer=AnswerNormalizer(),
+            config=QnaServiceConfig(retrieval_candidate_count=20, answer_candidate_count=5),
+        )
+
+        result = service.answer(
+            QnAQuery("person walks through a door", "How many people are visible?")
+        )
+
+        self.assertEqual(searcher.calls, [("person walks through a door", 20)])
+        self.assertEqual(len(result.candidates), 5)
+        self.assertEqual(result.candidates[0].rank, 1)
+        self.assertEqual(
+            [candidate.frame_id for candidate in result.candidates],
+            [5, 10, 15, 20, 25],
+        )
+        self.assertEqual(len(answerer.calls), 5)
+        submission = submission_from_debug(
+            TaskType.QNA,
+            "qna-recovery",
+            result.as_dict(),
+            frame_config=FrameDiversityConfig(
+                max_results=100,
+                max_per_video=20,
+                temporal_window_sec=0.0,
+            ),
+        )
+        self.assertEqual(len(submission.candidates), 5)
+        self.assertEqual(submission.candidates[-1].frame_ids, (25,))
+
     def test_service_retrieves_event_only_samples_clip_and_normalizes_answer(self) -> None:
         searcher = _FakeSearcher(_coarse_result())
         answerer = _FakeAnswerer()

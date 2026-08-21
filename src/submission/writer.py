@@ -165,9 +165,20 @@ def _frame_from_debug(value: object, task: TaskType) -> RankedFrame:
         video_id = str(value["video_id"])
         frame_id = int(value["frame_id"])
         timestamp_sec = float(value.get("timestamp_sec", frame_id))
-        score = float(value.get("score", value.get("retrieval_score")))
+        if task is TaskType.KIS:
+            # Dense KIS scores are local frame evidence.  The coarse score is
+            # the only score with global cross-candidate ranking semantics.
+            score_value = value.get(
+                "global_score",
+                value.get("coarse_score", value.get("score", value.get("retrieval_score"))),
+            )
+        else:
+            score_value = value.get("score", value.get("retrieval_score"))
+        score = float(score_value)
     except (KeyError, TypeError, ValueError) as error:
-        raise SubmissionFormatError("Debug frame candidate needs video_id, frame_id, timestamp_sec, and score") from error
+        raise SubmissionFormatError(
+            "Debug frame candidate needs video_id, frame_id, timestamp_sec, and score"
+        ) from error
     answer = None
     if task is TaskType.QNA:
         answer = str(value.get("normalized_answer") or "").strip()

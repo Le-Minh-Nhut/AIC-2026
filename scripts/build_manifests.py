@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from config import configured_data_root, load_yaml_config
-from data.manifest_builder import build_manifests
+from data.manifest_builder import ManifestBuildError, build_manifests
 
 
 def main() -> int:
@@ -19,10 +19,14 @@ def main() -> int:
     args = parser.parse_args()
     config = load_yaml_config()
     data_root = configured_data_root(config, args.data_root)
-    result = build_manifests(
-        data_root,
-        timestamp_tolerance_seconds=float(config["analysis"]["mapping_timestamp_tolerance_seconds"]),
-    )
+    try:
+        result = build_manifests(
+            data_root,
+            timestamp_tolerance_seconds=float(config["analysis"]["mapping_timestamp_tolerance_seconds"]),
+        )
+    except ManifestBuildError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 2
     print(f"videos_manifest.parquet: {len(result.videos)} row(s)")
     print(f"keyframes_manifest.parquet: {len(result.keyframes)} row(s)")
     print(f"mapping records: {len(result.mapping_load.records)}")

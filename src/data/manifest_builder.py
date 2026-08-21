@@ -59,6 +59,10 @@ class ManifestBuildResult:
     mapping_validation: MappingValidationReport
 
 
+class ManifestBuildError(ValueError):
+    """Raised before writing manifests when retrieval-critical mapping issues exist."""
+
+
 def collect_manifest_records(data_root: Path, timestamp_tolerance_seconds: float = 1.0) -> ManifestBuildResult:
     videos = tuple(scan_video_records(data_root))
     mapping_load = load_mapping_records(data_root / "raw" / "map_keyframes")
@@ -74,6 +78,14 @@ def collect_manifest_records(data_root: Path, timestamp_tolerance_seconds: float
 
 def build_manifests(data_root: Path, timestamp_tolerance_seconds: float = 1.0) -> ManifestBuildResult:
     result = collect_manifest_records(data_root, timestamp_tolerance_seconds)
+    high_issues = tuple(
+        issue for issue in result.mapping_validation.issues if issue.severity == "HIGH"
+    )
+    if high_issues:
+        details = "; ".join(f"{issue.code}: {issue.message}" for issue in high_issues[:5])
+        raise ManifestBuildError(
+            "Refusing to write retrieval manifests while HIGH mapping issues remain: " + details
+        )
     manifests_root = data_root / "manifests"
     write_parquet_records(
         manifests_root / "videos_manifest.parquet",

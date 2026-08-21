@@ -242,7 +242,7 @@ def _target_from_refined(candidate: RefinedFrameCandidate) -> _AnswerTarget:
         frame_id=candidate.original_frame_id,
         timestamp_sec=candidate.timestamp_sec,
         retrieval_score=candidate.coarse_score,
-        refinement_score=candidate.score,
+        refinement_score=(candidate.score if candidate.refinement_status == "refined" else None),
         rank=candidate.rank,
         source=candidate.source,
         source_scores=candidate.source_scores,

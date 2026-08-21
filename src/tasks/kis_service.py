@@ -56,24 +56,32 @@ def _refined_frame_dict(candidate: RefinedFrameCandidate) -> dict[str, object]:
     value["frame_id"] = candidate.original_frame_id
     value["coarse_frame_id"] = candidate.coarse_original_frame_id
     value["sparse_frame_id"] = candidate.sparse_original_frame_id
+    value["global_score"] = candidate.coarse_score
+    value["local_score"] = candidate.score
     return value
 
 
 @dataclass(frozen=True, slots=True)
 class KisRefinementResult:
-    """KIS coarse debug plus final original-video frame candidates."""
+    """KIS coarse debug plus all coarse candidates with refined/fallback frames."""
 
     coarse_result: KisCoarseResult
     candidates: tuple[RefinedFrameCandidate, ...]
     failures: tuple[RefinementFailure, ...]
 
     def as_dict(self) -> dict[str, object]:
+        refined_count = sum(
+            candidate.refinement_status == "refined" for candidate in self.candidates
+        )
+        fallback_count = len(self.candidates) - refined_count
         return {
             "query": self.coarse_result.query,
             "candidates": [_refined_frame_dict(candidate) for candidate in self.candidates],
             "coarse": self.coarse_result.as_dict(),
             "refinement": {
-                "refined_candidate_count": len(self.candidates),
+                "refined_candidate_count": refined_count,
+                "fallback_candidate_count": fallback_count,
+                "final_candidate_count": len(self.candidates),
                 "failure_count": len(self.failures),
                 "failures": [asdict(failure) for failure in self.failures],
             },
@@ -275,10 +283,27 @@ class KisDenseRefinementService:
 
     def search(self, query: str, top_k: int) -> KisRefinementResult:
         coarse_result = self._coarse_service.search(query, top_k)
-        run = self._refiner.refine(query, coarse_result.candidates)
+        coarse_candidates = tuple(
+            sorted(
+                coarse_result.candidates,
+                key=lambda candidate: (candidate.rank, candidate.keyframe_uid),
+            )
+        )
+        run = self._refiner.refine(query, coarse_candidates)
+        refined_by_uid = {
+            candidate.source_keyframe_uid: candidate
+            for candidate in run.candidates
+        }
+        final_candidates = tuple(
+            replace(
+                refined_by_uid.get(coarse.keyframe_uid, RefinedFrameCandidate.from_coarse(coarse)),
+                rank=rank,
+            )
+            for rank, coarse in enumerate(coarse_candidates, start=1)
+        )
         return KisRefinementResult(
             coarse_result=coarse_result,
-            candidates=run.candidates,
+            candidates=final_candidates,
             failures=run.failures,
         )
 

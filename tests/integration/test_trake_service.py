@@ -5,6 +5,7 @@ import importlib
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -24,6 +25,11 @@ temporal_aligner = importlib.import_module("trake.temporal_aligner")
 TemporalAligner = temporal_aligner.TemporalAligner
 TemporalAlignmentConfig = temporal_aligner.TemporalAlignmentConfig
 CandidateVideoSelector = importlib.import_module("trake.video_selector").CandidateVideoSelector
+RefinedFrameCandidate = importlib.import_module("refinement.dense_frame_refiner").RefinedFrameCandidate
+RefinedEventCandidate = importlib.import_module("trake.event_candidates").RefinedEventCandidate
+TrakeRefinementFailure = importlib.import_module("trake.event_refiner").TrakeRefinementFailure
+TrakeRefinementRun = importlib.import_module("trake.event_refiner").TrakeRefinementRun
+TemporalAlignment = temporal_aligner.TemporalAlignment
 
 
 def _candidate(video_id: str, event_name: str, frame_id: int, score: float) -> Candidate:
@@ -59,7 +65,7 @@ class _FakeCoarseSearcher:
         }
 
     def search(self, query: str, top_k: int) -> KisCoarseResult:
-        event_name = query.rsplit(":", maxsplit=1)[-1].strip()
+        event_name = query.split(":", maxsplit=1)[1].splitlines()[0].strip()
         candidates = self._rankings[event_name][:top_k]
         return KisCoarseResult(
             query=query,
@@ -70,7 +76,139 @@ class _FakeCoarseSearcher:
         )
 
 
+class _GlobalPriorCoarseSearcher:
+    def search(self, query: str, top_k: int) -> KisCoarseResult:
+        event_name = query.split(":", maxsplit=1)[1].splitlines()[0].strip()
+        frame_ids = {"approach": (10, 30), "landing": (20, 40)}[event_name]
+        scores = {"approach": (0.90, 0.40), "landing": (0.90, 0.40)}[event_name]
+        candidates = tuple(
+            _candidate(video_id, event_name, frame_id, score)
+            for video_id, frame_id, score in zip(("A", "B"), frame_ids, scores, strict=True)
+        )
+        return KisCoarseResult(
+            query=query,
+            candidates=candidates[:top_k],
+            video_candidates=(),
+            initial_candidate_count=len(candidates),
+            temporal_nms_enabled=False,
+        )
+
+
+class _LocalScaleEventRefiner:
+    def refine(self, coarse_alignment):
+        local_score = 10.0 if coarse_alignment.video_id == "B" else 0.1
+        refined_matches = tuple(
+            RefinedEventCandidate(
+                event=match.event,
+                coarse_candidate=match.candidate,
+                refined_candidate=replace(
+                    RefinedFrameCandidate.from_coarse(match.candidate),
+                    score=local_score,
+                    refinement_status="refined",
+                ),
+            )
+            for match in coarse_alignment.matches
+        )
+        refined = TemporalAlignment(
+            video_id=coarse_alignment.video_id,
+            matches=refined_matches,
+            event_scores=tuple(match.score for match in refined_matches),
+            transition_penalty=0.0,
+            total_score=sum(match.score for match in refined_matches),
+        )
+        return TrakeRefinementRun((refined,), ())
+
+
+class _FailingEventRefiner:
+    def refine(self, coarse_alignment):
+        return TrakeRefinementRun(
+            (),
+            (
+                TrakeRefinementFailure(
+                    video_id=coarse_alignment.video_id,
+                    event_index=None,
+                    event_text=None,
+                    coarse_frame_id=None,
+                    error="synthetic dense refinement failure",
+                ),
+            ),
+        )
+
+
 class TrakeServiceIntegrationTests(unittest.TestCase):
+    def test_refined_local_scores_cannot_flip_global_coarse_sequence_order(self) -> None:
+        service = TrakeService(
+            event_decomposer=RuleBasedEventDecomposer(),
+            coarse_searcher=_GlobalPriorCoarseSearcher(),
+            video_selector=CandidateVideoSelector(),
+            temporal_aligner=TemporalAligner(
+                TemporalAlignmentConfig(k_best_sequences=3, sequence_dedup_window_sec=0.0)
+            ),
+            config=TrakeServiceConfig(
+                event_top_k=2,
+                candidate_videos=2,
+                k_best_sequences=2,
+                sequences_to_refine=2,
+            ),
+            event_refiner=_LocalScaleEventRefiner(),
+        )
+
+        result = service.search("approach -> landing")
+
+        self.assertEqual([candidate.video_id for candidate in result.candidates], ["A", "B"])
+        self.assertEqual([candidate.total_alignment_score for candidate in result.candidates], [1.8, 0.8])
+        self.assertGreater(
+            result.candidates[1].local_alignment_score,
+            result.candidates[0].local_alignment_score,
+        )
+        self.assertTrue(
+            all(
+                all(
+                    left < right
+                    for left, right in zip(
+                        candidate.final_alignment.frame_ids,
+                        candidate.final_alignment.frame_ids[1:],
+                    )
+                )
+                for candidate in result.candidates
+            )
+        )
+
+    def test_trake_refinement_failure_keeps_coarse_monotonic_fallback(self) -> None:
+        service = TrakeService(
+            event_decomposer=RuleBasedEventDecomposer(),
+            coarse_searcher=_GlobalPriorCoarseSearcher(),
+            video_selector=CandidateVideoSelector(),
+            temporal_aligner=TemporalAligner(
+                TemporalAlignmentConfig(k_best_sequences=3, sequence_dedup_window_sec=0.0)
+            ),
+            config=TrakeServiceConfig(
+                event_top_k=2,
+                candidate_videos=2,
+                k_best_sequences=2,
+                sequences_to_refine=2,
+            ),
+            event_refiner=_FailingEventRefiner(),
+        )
+
+        result = service.search("approach -> landing")
+
+        self.assertEqual([candidate.video_id for candidate in result.candidates], ["A", "B"])
+        self.assertTrue(all(candidate.refinement_status == "failed" for candidate in result.candidates))
+        self.assertEqual([candidate.total_alignment_score for candidate in result.candidates], [1.8, 0.8])
+        self.assertTrue(
+            all(
+                all(
+                    left < right
+                    for left, right in zip(
+                        candidate.final_alignment.frame_ids,
+                        candidate.final_alignment.frame_ids[1:],
+                    )
+                )
+                for candidate in result.candidates
+            )
+        )
+
     def test_end_to_end_service_keeps_only_video_with_complete_ordered_evidence(self) -> None:
         service = TrakeService(
             event_decomposer=RuleBasedEventDecomposer(),

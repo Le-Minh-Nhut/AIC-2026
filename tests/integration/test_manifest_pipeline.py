@@ -5,15 +5,41 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from data.manifest_builder import collect_manifest_records
+from data.keyframe_mapping import MappingLoadResult
+from data.manifest_builder import (
+    ManifestBuildError,
+    ManifestBuildResult,
+    build_manifests,
+    collect_manifest_records,
+)
+from domain.models import MappingValidationReport, ValidationIssue
 
 
 class ManifestPipelineTests(unittest.TestCase):
+    def test_build_manifests_fails_before_writing_on_high_mapping_issue(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            data_root = Path(temporary) / "data"
+            invalid_result = ManifestBuildResult(
+                videos=(),
+                keyframes=(),
+                mapping_load=MappingLoadResult((), (), ()),
+                mapping_validation=MappingValidationReport(
+                    issues=[ValidationIssue("HIGH", "mapping_frame_out_of_bounds", "invalid frame")]
+                ),
+            )
+            with patch("data.manifest_builder.collect_manifest_records", return_value=invalid_result):
+                with self.assertRaises(ManifestBuildError):
+                    build_manifests(data_root)
+
+            self.assertFalse((data_root / "manifests" / "videos_manifest.parquet").exists())
+            self.assertFalse((data_root / "manifests" / "keyframes_manifest.parquet").exists())
+
     def test_discovers_keyframes_and_json_mapping_without_guessing_video_probe(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             data_root = Path(temporary) / "data"

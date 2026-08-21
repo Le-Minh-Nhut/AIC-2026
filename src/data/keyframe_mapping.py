@@ -173,6 +173,7 @@ def validate_mapping(
     }
     mapping_keys = [(mapping.video_id, mapping.keyframe_index) for mapping in mapping_list]
     mapping_counts = Counter(mapping_keys)
+    invalid_mapping_keys: set[tuple[str, int]] = set()
     duplicate_mapping_keys = [key for key, count in mapping_counts.items() if count > 1]
     if duplicate_mapping_keys:
         report.duplicate_keyframe_index_count = len(duplicate_mapping_keys)
@@ -201,13 +202,10 @@ def validate_mapping(
             video.frame_count is not None and mapping.original_frame_id >= video.frame_count
         ):
             report.invalid_frame_count += 1
+            invalid_mapping_keys.add(mapping_key)
     if report.unknown_video_count:
         report.issues.append(
             ValidationIssue("HIGH", "mapping_unknown_video", "Mappings reference missing videos")
-        )
-    if report.invalid_frame_count:
-        report.issues.append(
-            ValidationIssue("HIGH", "mapping_frame_out_of_bounds", "Mappings contain invalid frame IDs")
         )
     if report.missing_mapping_count:
         report.issues.append(
@@ -231,9 +229,21 @@ def validate_mapping(
         video = video_map.get(video_id)
         if video and video.fps and video.duration_sec is not None:
             for mapping in ordered:
-                if mapping.original_frame_id / video.fps > video.duration_sec + timestamp_tolerance_seconds:
+                mapping_key = (mapping.video_id, mapping.keyframe_index)
+                if (
+                    mapping_key not in invalid_mapping_keys
+                    and mapping.original_frame_id / video.fps
+                    > video.duration_sec + timestamp_tolerance_seconds
+                ):
                     report.invalid_frame_count += 1
+                    invalid_mapping_keys.add(mapping_key)
                     break
+    if report.invalid_frame_count and not any(
+        issue.code == "mapping_frame_out_of_bounds" for issue in report.issues
+    ):
+        report.issues.append(
+            ValidationIssue("HIGH", "mapping_frame_out_of_bounds", "Mappings contain invalid frame IDs")
+        )
     report.duplicate_frame_mapping_count = len(duplicate_frame_mappings)
     report.non_monotonic_count = len(non_monotonic)
     if duplicate_frame_mappings:

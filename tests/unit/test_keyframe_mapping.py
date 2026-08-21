@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
@@ -48,6 +49,17 @@ def video() -> VideoRecord:
 
 
 class MappingValidationTests(unittest.TestCase):
+    def test_timestamp_bound_issue_is_high_and_counted_once(self) -> None:
+        report = validate_mapping(
+            [keyframe(0)],
+            [replace(video(), frame_count=100, duration_sec=0.1)],
+            [MappingRecord("L21_V001", 0, 4, "map.json")],
+            timestamp_tolerance_seconds=0.0,
+        )
+
+        self.assertEqual(report.invalid_frame_count, 1)
+        self.assertTrue(any(issue.code == "mapping_frame_out_of_bounds" for issue in report.issues))
+
     def test_detects_non_monotonic_and_out_of_bounds_mapping(self) -> None:
         report = validate_mapping(
             [keyframe(0), keyframe(1)],

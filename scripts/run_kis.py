@@ -183,9 +183,15 @@ def _print_candidates(result: Any) -> None:
         source_keyframe_uid = (
             candidate.keyframe_uid if hasattr(candidate, "keyframe_uid") else candidate.source_keyframe_uid
         )
+        global_score = getattr(candidate, "coarse_score", candidate.score)
+        score_detail = (
+            f"global={global_score:.6f} local={candidate.score:.6f}"
+            if hasattr(candidate, "coarse_score")
+            else f"score={candidate.score:.6f}"
+        )
         print(
             f"{candidate.rank:3}  {candidate.video_id:12}  frame={candidate.original_frame_id:8}  "
-            f"time={candidate.timestamp_sec:9.3f}  score={candidate.score:.6f}  "
+            f"time={candidate.timestamp_sec:9.3f}  {score_detail}  "
             f"{source_keyframe_uid}"
         )
 
